@@ -404,4 +404,3 @@ export async function startDiscordBot() {
     });
   }
 }
-

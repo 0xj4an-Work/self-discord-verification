@@ -38,4 +38,3 @@ export function decodeUserDefinedDataHex(userDefinedDataHex) {
     return null;
   }
 }
-

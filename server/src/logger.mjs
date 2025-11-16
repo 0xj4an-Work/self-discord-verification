@@ -20,4 +20,3 @@ export function logEvent(type, message, extra = {}) {
     }
   });
 }
-

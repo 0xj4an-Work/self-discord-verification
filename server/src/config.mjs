@@ -16,4 +16,3 @@ export const SELF_APP_NAME =
   process.env.SELF_APP_NAME || "Self Discord Verification (Mock Passports)";
 export const SELF_LOGO_URL =
   process.env.SELF_LOGO_URL || "https://i.postimg.cc/mrmVf9hm/self.png";
-
