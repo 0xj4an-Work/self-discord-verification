@@ -13,8 +13,6 @@ import {
 } from "./src/discordBot.mjs";
 
 const app = express();
-let lastVerificationResult = null;
-
 app.use(bodyParser.json());
 
 app.get("/", (_req, res) => {
@@ -48,8 +46,6 @@ app.post("/api/verify", async (req, res) => {
     );
 
     const { isValid, isMinimumAgeValid, isOfacValid } = result.isValidDetails;
-
-    lastVerificationResult = result;
 
     if (!isValid || !isMinimumAgeValid || isOfacValid) {
       let reason = "Verification failed";
@@ -119,17 +115,6 @@ app.post("/api/verify", async (req, res) => {
         error instanceof Error ? error.message : "Unknown verification error",
     });
   }
-});
-
-app.get("/debug/last-result", (_req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  if (!lastVerificationResult) {
-    return res.status(200).json({ status: "empty" });
-  }
-  res.status(200).json({
-    status: "ok",
-    verificationResult: lastVerificationResult,
-  });
 });
 
 app.listen(PORT, () => {

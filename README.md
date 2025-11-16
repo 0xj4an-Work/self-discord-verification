@@ -11,8 +11,6 @@ This project exposes a Self-powered backend and a Discord bot that:
 - Automatically assigns a “verified” role so users can see age-gated channels.
 - Logs all verification activity and stores QR images on disk.
 
----
-
 ## 1. Architecture Overview
 
 - **Express backend**
@@ -20,7 +18,6 @@ This project exposes a Self-powered backend and a Discord bot that:
   - Configured for **staging / mock passports** with OFAC enabled and a minimum age requirement.
   - Exposes:
     - `POST /api/verify` – main verification endpoint (called by the Self app).
-    - `GET /debug/last-result` – returns the last verification result (for debugging).
 
 - **Discord bot**
   - Listens for `/verify` in your Discord server.
@@ -34,21 +31,9 @@ This project exposes a Self-powered backend and a Discord bot that:
     - Assigns a configurable `Verified` role to the user.
     - Sends them a success DM.
 
-- **Data & logging**
+-- **Data & logging**
   - QR images: `server/qrcodes/*.png`
   - Logs: `server/logs/discord-verifier.log` (JSON lines; safe to tail/parse).
-
----
-
-## 2. Project Structure
-
-- `server/`
-  - `index.mjs` – Express app + Discord bot entrypoint.
-  - `package.json` – Node dependencies (`express`, `discord.js`, `@selfxyz/core`, `@selfxyz/common`, `qrcode`).
-  - `qrcodes/` – generated Self QR PNGs (ignored by git).
-  - `logs/` – JSON log file(s) for bot + verification events (ignored by git).
-
----
 
 ## 3. Prerequisites
 
@@ -61,8 +46,6 @@ You’ll need:
 - A **Discord account** with permission to:
   - Create applications in the Discord Developer Portal.
   - Add a bot to your server and manage roles.
-
----
 
 ## 4. One-time Setup
 
@@ -107,8 +90,6 @@ This installs Express, Discord.js, the Self SDKs, and other dependencies.
    Use this value in your `.env` file (see below).
 
 > **Important:** Self endpoints must be HTTPS and **must not** be `localhost` or `127.0.0.1`. A tunnel like ngrok solves this.
-
----
 
 ## 5. Discord Bot Setup (Developer Portal)
 
@@ -171,8 +152,6 @@ This installs Express, Discord.js, the Self SDKs, and other dependencies.
 
 > Make sure the bot’s own role is **above** the `Verified` role in the role list, otherwise it cannot assign that role.
 
----
-
 ## 6. Environment Configuration (`server/.env`)
 
 Create a file `server/.env` (this file is ignored by git; safe to keep secrets there).
@@ -218,9 +197,7 @@ Field-by-field:
 - `SELF_APP_NAME` / `SELF_LOGO_URL`
   - Optional customizations for how the Self app entry appears inside the Self mobile app.
 
----
-
-## 7. Running the Backend + Discord Bot
+## 6. Running the Backend + Discord Bot
 
 1. **Start the backend + bot**
 
@@ -250,12 +227,8 @@ Field-by-field:
    - `POST /api/verify`
      - Called by the Self app.
      - Uses `SelfBackendVerifier` to validate the proof against your config (age, OFAC, etc.).
-   - `GET /debug/last-result`
-     - Returns the last verification result (debugging only).
 
----
-
-## 8. Using the Bot (User Flow)
+## 7. Using the Bot (User Flow)
 
 1. In your Discord server, in any text channel, run:
 
@@ -286,8 +259,6 @@ Field-by-field:
      > ✅ Your Self verification succeeded. You now have access to the restricted channels.
 
 5. You now see the restricted category/channels where you granted `View Channel` to the `Verified` role.
-
----
 
 ## 9. Troubleshooting
 
@@ -322,15 +293,3 @@ Field-by-field:
   - `SELF_SCOPE` is ≤ 31 ASCII characters.
   - `SELF_ENDPOINT` is exactly the ngrok URL + `/api/verify` and does not contain `localhost`.
   - ngrok is running and points to the same port/host where Express is listening.
-
----
-
-## 10. Development Notes
-
-- **Code style**
-  - Server code is written in modern ESM (`type: "module"`) using Node 18+.
-  - Self SDKs may log engine warnings on non-Node-22 runtimes; these can generally be ignored for local development.
-- **Persistence**
-  - QR images and logs are kept on disk and ignored by git; feel free to clear `server/qrcodes/` and `server/logs/` occasionally.
-
-You can now use this bot as a template for gating any set of channels/categories on your server behind Self-based identity and age verification. 
