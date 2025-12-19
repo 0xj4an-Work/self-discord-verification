@@ -56,7 +56,7 @@ async function createSelfVerificationQr(sessionId, discordUser) {
     endpoint: SELF_ENDPOINT,
     logoBase64: SELF_LOGO_URL,
     userId,
-    endpointType: "staging_https",
+    endpointType: "https",
     userIdType: "hex",
     userDefinedData: JSON.stringify({
       kind: "discord-self-verification",
