@@ -66,10 +66,6 @@ async function createSelfVerificationQr(sessionId, discordUser) {
     }),
     disclosures: {
       minimumAge: 18,
-      excludedCountries: [],
-      ofac: true,
-      nationality: true,
-      gender: true,
     },
   }).build();
 

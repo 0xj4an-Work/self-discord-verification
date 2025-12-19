@@ -10,8 +10,6 @@ export const selfBackendVerifier = new SelfBackendVerifier(
   AllIds,
   new DefaultConfigStore({
     minimumAge: 18,
-    excludedCountries: [],
-    ofac: true,
   }),
   "hex",
 );
