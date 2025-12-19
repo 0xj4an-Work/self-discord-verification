@@ -13,14 +13,14 @@
   "author": "kartikmehta8",
   "license": "MIT",
   "dependencies": {
-    "@selfxyz/common": "^0.0.8",
-    "@selfxyz/core": "^1.0.5-beta.7",
-    "@selfxyz/qrcode": "^1.0.17",
+  "@selfxyz/common": "^0.0.9",
+    "@selfxyz/core": "^1.1.0-beta.7",
     "body-parser": "^2.2.0",
     "discord.js": "^14.16.3",
     "dotenv": "^17.2.3",
     "ethers": "^6.15.0",
-    "express": "^5.1.0"
+    "express": "^5.1.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "nodemon": "^3.1.11",
