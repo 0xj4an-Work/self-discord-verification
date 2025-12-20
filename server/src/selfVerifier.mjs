@@ -4,9 +4,9 @@ import { SELF_ENDPOINT } from "./config.mjs";
 import { logEvent } from "./logger.mjs";
 
 export const selfBackendVerifier = new SelfBackendVerifier(
-  undefined, // No scope for offchain verification
+  "", // Empty scope for offchain verification
   SELF_ENDPOINT,
-  false, // offchain mode
+  false, // offchain mode (mockPassport=false means production)
   AllIds,
   new DefaultConfigStore({
     minimumAge: 18,
