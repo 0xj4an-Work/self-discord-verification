@@ -51,12 +51,12 @@ async function createSelfVerificationQr(sessionId, discordUser) {
   const selfApp = new SelfAppBuilder({
     version: 2,
     appName: SELF_APP_NAME,
+    scope: "offchain", // Generic scope for offchain verification (not validated onchain)
     endpoint: SELF_ENDPOINT,
     logoBase64: SELF_LOGO_URL,
     userId,
     endpointType: "https",
     userIdType: "hex",
-    // No scope field for offchain verification
     userDefinedData: JSON.stringify({
       kind: "discord-self-verification",
       sessionId,
