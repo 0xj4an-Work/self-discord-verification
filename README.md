@@ -2,294 +2,641 @@
 
 # Self Discord Verification Bot
 
-Self verification backend + Discord bot using Self mock passports.
+Privacy-preserving age verification for Discord servers using Self Protocol's zero-knowledge proof technology.
 
-This project exposes a Self-powered backend and a Discord bot that:
+This project provides a Discord bot that verifies users are 18+ years old using [Self Protocol](https://self.xyz) without exposing their actual age or identity. The bot uses cryptographic attestations and zero-knowledge proofs to confirm minimum age requirements and OFAC compliance, then automatically grants access to age-restricted channels.
 
-- Generates a Self QR code and sends it to users via DM (`/verify` slash command).
-- Verifies proofs on an Express backend with mock passports and OFAC checking.
-- Automatically assigns a “verified” role so users can see age-gated channels.
-- Logs all verification activity and stores QR images on disk.
+## Features
 
-## 1. Architecture Overview
+- **Zero-knowledge age verification**: Confirm users are 18+ without revealing their actual birthdate
+- **Privacy-preserving**: No personal information or identity data is exposed or stored
+- **Automated role assignment**: Users who verify automatically receive the configured role
+- **OFAC compliance**: Built-in sanctions list checking
+- **No database required**: All state managed in-memory and Discord roles
+- **Simple UX**: Single `/verify` command triggers the entire flow
+- **Comprehensive logging**: JSON-formatted logs for monitoring and debugging
 
-- **Express backend**
-  - Uses `SelfBackendVerifier` from `@selfxyz/core` to verify proofs from the Self app.
-  - Configured for **staging / mock passports** with OFAC enabled and a minimum age requirement.
-  - Exposes:
-    - `POST /api/verify` – main verification endpoint (called by the Self app).
+## How It Works
 
-- **Discord bot**
-  - Listens for `/verify` in your Discord server.
-  - For each user:
-    - Builds a Self app configuration (`SelfAppBuilder` from `@selfxyz/common`) including a unique session id and Discord user id.
-    - Generates a Self universal link and encodes it as a QR PNG.
-    - DMs the QR to the user.
-  - When the Self app completes verification:
-    - The Self backend decodes the `userDefinedData` from the proof.
-    - Matches it to a pending Discord session.
-    - Assigns a configurable `Verified` role to the user.
-    - Sends them a success DM.
+```text
+User runs /verify → Bot generates QR code → User scans with Self app
+→ Self app creates zero-knowledge proof → Backend verifies proof
+→ Bot assigns role → User gains access to restricted channels
+```
 
--- **Data & logging**
-  - QR images: `server/qrcodes/*.png`
-  - Logs: `server/logs/discord-verifier.log` (JSON lines; safe to tail/parse).
+The verification process:
 
-## 3. Prerequisites
+1. User runs `/verify` in Discord
+2. Bot generates a unique verification QR code and DMs it to the user
+3. User scans the QR with the [Self.xyz mobile app](https://self.xyz)
+4. Self app generates a zero-knowledge proof confirming user is 18+ and OFAC compliant
+5. Backend validates the proof without learning the user's actual age or birthdate
+6. Bot automatically assigns the verified role
+7. User can now access age-restricted channels
 
-You’ll need:
+## Architecture
 
-- **Node.js** 18+ (Self SDKs recommend Node 22; you may see engine warnings on other versions, but this project runs on Node 18–20 as well).
-- **npm** (comes with Node).
-- **ngrok** (or any HTTPS tunnelling tool):
-  - Required because the Self app must reach your `/api/verify` endpoint over HTTPS with a public URL.
-- A **Discord account** with permission to:
-  - Create applications in the Discord Developer Portal.
-  - Add a bot to your server and manage roles.
+### Components
 
-## 4. One-time Setup
+**Express Backend** ([index.mjs](server/index.mjs))
 
-### 4.1. Install dependencies
+- Handles webhook requests from Self mobile app
+- Verifies zero-knowledge proofs using `@selfxyz/core`
+- Validates minimum age (18+) and OFAC compliance
+- Exposes `POST /api/verify` endpoint
+
+**Discord Bot** ([discordBot.mjs](server/src/discordBot.mjs))
+
+- Registers and handles `/verify` slash command
+- Generates Self verification QR codes
+- Manages pending verification sessions (in-memory)
+- Assigns roles on successful verification
+- Sends DMs with QR codes and status updates
+
+**Self Verifier** ([selfVerifier.mjs](server/src/selfVerifier.mjs))
+
+- Configures `SelfBackendVerifier` in offchain mode
+- Decodes user-defined data from proofs
+- Validates cryptographic attestations
+
+### Technology Stack
+
+- **Backend**: Node.js, Express.js v5
+- **Discord**: Discord.js v14 with slash commands
+- **Self Protocol**: @selfxyz/core (verifier), @selfxyz/common (QR generation)
+- **Utilities**: ethers.js (hex encoding), qrcode (PNG generation)
+
+### Data Flow
+
+```text
+┌─────────────┐      /verify       ┌──────────────┐
+│   Discord   │ ───────────────────>│  Discord Bot │
+│    User     │                     └──────────────┘
+└─────────────┘                            │
+      │                                    │ Generate QR + sessionId
+      │                                    v
+      │                          ┌──────────────────┐
+      │<─────────────────────────│  QR Code (DM)    │
+      │                          └──────────────────┘
+      │
+      │ Scan QR
+      v
+┌──────────────┐
+│  Self.xyz    │
+│  Mobile App  │
+└──────────────┘
+      │
+      │ Generate proof
+      v
+┌──────────────────┐     POST      ┌──────────────────┐
+│  Express Server  │ <────────────│ Self Protocol    │
+│  /api/verify     │               └──────────────────┘
+└──────────────────┘
+      │
+      │ Verify proof + decode sessionId
+      v
+┌──────────────────┐
+│  Discord Bot     │
+│  Assign Role     │
+└──────────────────┘
+      │
+      v
+┌──────────────────┐
+│  User gets role  │
+│  & success DM    │
+└──────────────────┘
+```
+
+### Storage
+
+- **In-memory**: Pending verification sessions (lost on restart)
+- **File system**: QR codes (`server/qrcodes/`) and logs (`server/logs/`)
+- **No database**: All persistent state is stored in Discord roles
+
+## Prerequisites
+
+### Required
+
+- **Node.js** 18+ (LTS recommended)
+- **npm** (included with Node.js)
+- **Discord account** with:
+  - Server (guild) admin permissions
+  - Ability to create Discord applications
+- **ngrok account** (free tier works) for HTTPS tunnel
+  - Alternative: Any public HTTPS URL (Railway, Heroku, etc.)
+
+### Optional
+
+- **Self.xyz mobile app** for testing (download from App Store/Google Play)
+
+## Installation
+
+### 1. Clone and Install Dependencies
 
 ```bash
+# Clone the repository
+git clone <your-repo-url>
+cd self-discord-verification
+
+# Install server dependencies
 cd server
 npm install
 ```
 
-This installs Express, Discord.js, the Self SDKs, and other dependencies.
+### 2. Set Up ngrok (Development Only)
 
-### 4.2. Set up ngrok (public HTTPS URL for Self)
+For local development, you need a public HTTPS URL. ngrok provides this for free.
 
-1. Go to <https://ngrok.com> and create a free account.
-2. Install the ngrok CLI (follow their OS-specific instructions).
-3. Get your **ngrok authtoken** from the ngrok dashboard.
-4. Configure ngrok locally:
+```bash
+# Install ngrok
+# macOS
+brew install ngrok
 
-   ```bash
-   ngrok config add-authtoken <YOUR_NGROK_AUTHTOKEN>
-   ```
+# Or download from https://ngrok.com/download
 
-5. Once the backend is running (see section 6), expose it:
+# Authenticate with your ngrok token
+ngrok config add-authtoken <YOUR_NGROK_TOKEN>
 
-   ```bash
-   ngrok http 3001
-   ```
+# Start the tunnel (after server is running)
+ngrok http 3001
+```
 
-6. ngrok will show something like:
+**Note**: For production deployment, use a real HTTPS URL from your hosting provider.
 
-   ```text
-   Forwarding  https://40345855ba7b.ngrok-free.app -> http://localhost:3001
-   ```
+### 3. Create Discord Bot
 
-7. Construct your Self endpoint URL:
+1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
+2. Click **New Application**, name it (e.g., "Self Verifier"), click **Create**
+3. Navigate to the **Bot** tab:
+   - Click **Add Bot** → **Yes, do it!**
+   - Click **Reset Token** and copy the token → this is `DISCORD_BOT_TOKEN`
+   - Enable **Privileged Gateway Intents**:
+     - ✅ SERVER MEMBERS INTENT
+     - ✅ MESSAGE CONTENT INTENT
+   - Click **Save Changes**
+4. Go to **General Information** tab:
+   - Copy **Application ID** → this is `DISCORD_CLIENT_ID`
 
-   ```text
-   SELF_ENDPOINT = https://40345855ba7b.ngrok-free.app/api/verify
-   ```
+### 4. Invite Bot to Server
 
-   Use this value in your `.env` file (see below).
+1. In Developer Portal, go to **OAuth2** → **URL Generator**
+2. Select **Scopes**:
+   - ✅ `bot`
+   - ✅ `applications.commands`
+3. Select **Bot Permissions**:
+   - ✅ View Channels
+   - ✅ Send Messages
+   - ✅ Send Messages in Threads
+   - ✅ Read Message History
+   - ✅ Manage Roles (required)
+4. Copy the generated URL, open in browser
+5. Select your server and authorize
 
-> **Important:** Self endpoints must be HTTPS and **must not** be `localhost` or `127.0.0.1`. A tunnel like ngrok solves this.
+### 5. Configure Discord Server
 
-## 5. Discord Bot Setup (Developer Portal)
+#### Get Server ID
 
-### 5.1. Create the application and bot
+1. In Discord: **Settings** → **Advanced** → Enable **Developer Mode**
+2. Right-click your server icon → **Copy Server ID** → this is `DISCORD_GUILD_ID`
 
-1. Open the Discord Developer Portal: <https://discord.com/developers/applications>.
-2. Click **“New Application”**, give it a name (e.g. `Self Verification Bot`), click **Create**.
-3. On the application’s **General Information** page:
-   - Copy **Application ID** → this will be `DISCORD_CLIENT_ID`.
-4. Go to the **Bot** tab:
-   - Click **“Add Bot”** → **Yes, do it!**
-   - Under **Token**:
-     - Click **Reset Token**, copy the bot token.
-     - This will be `DISCORD_BOT_TOKEN`.
-   - Scroll down to **Privileged Gateway Intents** and enable:
-     - `SERVER MEMBERS INTENT`
-     - `MESSAGE CONTENT INTENT`
-   - Click **Save Changes**.
+#### Create Verified Role
 
-### 5.2. Invite the bot to your server
+1. Server Settings → **Roles** → **Create Role**
+2. Name it "Self.xyz Verified Role" (or similar)
+3. Right-click the role → **Copy Role ID** → this is `DISCORD_VERIFIED_ROLE_ID`
+4. **IMPORTANT**: Drag your bot's role **above** this verified role in the role list
 
-1. In the Developer Portal, go to **OAuth2 → URL Generator**.
-2. Under **Scopes**, select:
-   - `bot`
-   - `applications.commands`
-3. Under **Bot Permissions**, select at least:
-   - `View Channels`
-   - `Send Messages`
-   - `Send Messages in Threads`
-   - `Read Message History`
-   - `Manage Roles` (required to assign your `Verified` role)
-4. Copy the generated URL and open it in your browser.
-5. Choose the server where you want the bot to live, click **Authorize**, and complete the captcha.
+#### Create Restricted Channels
 
-### 5.3. Get your server (guild) ID
+1. Create a category (e.g., "18+ Verified")
+2. Add channels inside it
+3. Right-click category → **Edit Category** → **Permissions**:
+   - **@everyone**: ❌ View Channel
+   - **Your verified role**: ✅ View Channel
+4. Save changes
 
-1. In the Discord client, go to **Settings → Advanced**.
-2. Enable **Developer Mode**.
-3. Right-click your server icon → **Copy Server ID**.
-4. This value is `DISCORD_GUILD_ID`.
+### 6. Configure Environment Variables
 
-### 5.4. Create a “Verified” role and a restricted category
+Create `server/.env`:
 
-1. In your server, open **Server Settings → Roles**.
-2. Click **Create Role**:
-   - Name it something like `Verified`.
-   - Give it a color if you want.
-   - Save changes.
-3. To get the role ID:
-   - Right-click the `Verified` role → **Copy Role ID**.
-   - This value is `DISCORD_VERIFIED_ROLE_ID`.
+```bash
+# Copy the sample file
+cd server
+cp ../.sample.env .env
+```
 
-4. Configure the restricted category:
-   - Create a category (e.g. `restricted`).
-   - Create one or more channels inside it.
-   - Right-click the category → **Edit Category → Permissions**:
-     - For `@everyone`: **disable** `View Channel`.
-     - For `Verified` role: **enable** `View Channel`.
-   - Save changes.
-
-> Make sure the bot’s own role is **above** the `Verified` role in the role list, otherwise it cannot assign that role.
-
-## 6. Environment Configuration (`server/.env`)
-
-Create a file `server/.env` (this file is ignored by git; safe to keep secrets there).
-
-Example:
+Edit `.env` with your values:
 
 ```env
+# Server Configuration
 PORT=3001
 
-# Self verifier configuration
-SELF_SCOPE=demo-scope
+# Self Protocol Configuration
 SELF_ENDPOINT=https://your-ngrok-id.ngrok-free.app/api/verify
 
-# Discord bot configuration
-DISCORD_BOT_TOKEN=your-discord-bot-token
-DISCORD_CLIENT_ID=your-discord-application-client-id
-DISCORD_GUILD_ID=your-discord-server-id
-DISCORD_VERIFIED_ROLE_ID=verified-role-id
+# Discord Bot Configuration
+DISCORD_BOT_TOKEN=your-bot-token-from-step-3
+DISCORD_CLIENT_ID=your-application-id-from-step-3
+DISCORD_GUILD_ID=your-server-id-from-step-5
+DISCORD_VERIFIED_ROLE_ID=your-role-id-from-step-5
 
-# Optional: customize how the Self app appears
-SELF_APP_NAME=Self Discord Verification (Mock Passports)
+# Optional Branding
+SELF_APP_NAME=Self Discord Verification
 SELF_LOGO_URL=https://i.postimg.cc/mrmVf9hm/self.png
 ```
 
-Field-by-field:
+#### Environment Variable Reference
 
-- `PORT`
-  - Local port for Express (default `3001`).
-- `SELF_SCOPE`
-  - A short ASCII string identifying this verification “scope”, e.g. `demo-scope`.
-  - Must be ≤ 31 characters.
-- `SELF_ENDPOINT`
-  - Public HTTPS URL for `/api/verify`, e.g. `https://40345855ba7b.ngrok-free.app/api/verify`.
-  - **Must not** contain `localhost` or `127.0.0.1`.
-- `DISCORD_BOT_TOKEN`
-  - Bot token from the Developer Portal **Bot** tab.
-- `DISCORD_CLIENT_ID`
-  - Application ID from the Developer Portal **General Information** page.
-- `DISCORD_GUILD_ID`
-  - Your Discord server (guild) ID.
-- `DISCORD_VERIFIED_ROLE_ID`
-  - ID of the role that should be assigned when verification succeeds; used to gate the restricted category.
-- `SELF_APP_NAME` / `SELF_LOGO_URL`
-  - Optional customizations for how the Self app entry appears inside the Self mobile app.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | No | Express server port (default: 8080) |
+| `SELF_ENDPOINT` | **Yes** | Public HTTPS URL + `/api/verify` (no localhost!) |
+| `DISCORD_BOT_TOKEN` | **Yes** | Bot token from Developer Portal |
+| `DISCORD_CLIENT_ID` | **Yes** | Application ID from Developer Portal |
+| `DISCORD_GUILD_ID` | **Yes** | Your Discord server ID |
+| `DISCORD_VERIFIED_ROLE_ID` | **Yes** | Role to assign on verification |
+| `SELF_APP_NAME` | No | Name shown in Self app |
+| `SELF_LOGO_URL` | No | Logo shown in Self app |
 
-## 6. Running the Backend + Discord Bot
+**Critical**: `SELF_ENDPOINT` must be:
 
-1. **Start the backend + bot**
+- HTTPS (not HTTP)
+- Publicly accessible (not localhost/127.0.0.1)
+- Include the full path: `https://your-domain.com/api/verify`
+
+## Usage
+
+### Development
+
+1. **Start the server**:
 
    ```bash
    cd server
    npm run dev
    ```
 
-   You should see logs like:
-
-   - `Self Express Backend listening on http://localhost:3001`
-   - `discord.commands_registered` (slash commands registered)
-   - `discord.ready` (bot logged in)
-
-2. **Expose the backend to Self (ngrok)**
-
-   With the backend running:
+2. **Start ngrok** (in a separate terminal):
 
    ```bash
    ngrok http 3001
    ```
 
-   Update `SELF_ENDPOINT` if the ngrok URL changes.
+3. **Update `.env`** with the ngrok URL (if it changed):
 
-3. **Endpoints**
-
-   - `POST /api/verify`
-     - Called by the Self app.
-     - Uses `SelfBackendVerifier` to validate the proof against your config (age, OFAC, etc.).
-
-## 7. Using the Bot (User Flow)
-
-1. In your Discord server, in any text channel, run:
-
-   ```text
-   /verify
+   ```env
+   SELF_ENDPOINT=https://abc123.ngrok-free.app/api/verify
    ```
 
-2. The bot:
-   - Immediately replies in the channel (ephemeral):
-     - “Generating your Self verification QR… I’ll DM it to you shortly.”
-   - Generates a unique Self app configuration for you.
-   - Creates a QR PNG and saves it to `server/qrcodes/...`.
-   - DMs you the QR with the instruction:
-     - “Scan this QR code with the Self app (staging/mock passports) to verify your age/identity.”
+4. **Restart the server** if you changed `.env`
 
-3. You:
-   - Open the Self app (staging) on your phone.
-   - Ensure you have a **mock passport** set up.
-   - Scan the QR and follow the flow inside the Self app.
+### Production
 
-4. The backend:
-   - Verifies the proof (age, OFAC, etc.) via `SelfBackendVerifier`.
-   - Decodes the `userDefinedData` from the proof to find the matching Discord session.
-   - Assigns the `Verified` role to your user.
-   - Logs the event to `server/logs/discord-verifier.log`.
-   - DMs you:
+```bash
+cd server
+npm start
+```
 
-     > ✅ Your Self verification succeeded. You now have access to the restricted channels.
+Use your production HTTPS URL in `SELF_ENDPOINT`.
 
-5. You now see the restricted category/channels where you granted `View Channel` to the `Verified` role.
+### User Verification Flow
 
-## 9. Troubleshooting
+1. User runs `/verify` in any Discord channel
+2. Bot replies: "Generating your Self verification QR… I'll DM it to you shortly."
+3. Bot sends QR code via DM
+4. User scans QR with Self.xyz mobile app
+5. User completes verification in the app
+6. Bot automatically assigns the verified role
+7. Bot sends success DM: "✅ Your Self verification succeeded. [Add your custom message here]"
+8. User can now see restricted channels
 
-**No `/verify` command in my server**
+### Testing the Integration
 
-- Check the logs for `discord.commands_registered`.
-- Ensure:
-  - `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`, `DISCORD_BOT_TOKEN` are set correctly.
-  - The bot is actually added to that server.
-  - You restarted the backend after setting `.env`.
+To verify everything works:
 
-**Bot says it sent a DM, but I don’t see it**
+```bash
+# Check server is running
+curl http://localhost:3001
+# Should return: {"status":"ok","message":"Self Express Backend + Discord verifier bot (offchain)"}
 
-- In Discord:
-  - `Settings → Privacy & Safety → Server Privacy Defaults` and enable “Allow direct messages from server members”.
-  - Or right-click your server → **Privacy Settings** → enable DMs.
-- Try `/verify` again.
+# Check Discord bot is online
+# Look in Discord - bot should show as online
 
-**User verifies but doesn’t get the role**
+# Check logs
+tail -f server/logs/discord-verifier.log
+# Should see: {"event":"discord.ready",...}
+```
 
-- Check `server/logs/discord-verifier.log` for:
-  - `verification.role_not_found` – `DISCORD_VERIFIED_ROLE_ID` might be wrong or the role was deleted.
-  - `verification.no_role_configured` – you didn’t set `DISCORD_VERIFIED_ROLE_ID`.
-  - `verification.discord_error` – bot lacks `Manage Roles` or its role is below the target role.
-- Ensure:
-  - Bot has the `Manage Roles` permission.
-  - Bot’s role is **above** the `Verified` role in the role list.
+## API Reference
 
-**Self app errors about endpoint or scope**
+### POST /api/verify
 
-- Confirm:
-  - `SELF_SCOPE` is ≤ 31 ASCII characters.
-  - `SELF_ENDPOINT` is exactly the ngrok URL + `/api/verify` and does not contain `localhost`.
-  - ngrok is running and points to the same port/host where Express is listening.
+Webhook endpoint called by Self mobile app after user completes verification.
+
+**Request**:
+
+```json
+{
+  "attestationId": "string",
+  "proof": {
+    "pi_a": [...],
+    "pi_b": [...],
+    "pi_c": [...],
+    "protocol": "groth16"
+  },
+  "publicSignals": [...],
+  "userContextData": {...}
+}
+```
+
+**Response (Success)**:
+
+```json
+{
+  "status": "success",
+  "result": true,
+  "credentialSubject": {...},
+  "userData": {
+    "userDefinedData": "hex-encoded-metadata"
+  }
+}
+```
+
+**Response (Failure)**:
+
+```json
+{
+  "status": "error",
+  "result": false,
+  "reason": "Minimum age verification failed",
+  "details": {
+    "isValid": false,
+    "isMinimumAgeValid": false,
+    "isOfacValid": true
+  }
+}
+```
+
+**Validation Rules**:
+
+- ✅ Proof must be cryptographically valid
+- ✅ User must be 18+ years old
+- ✅ User must NOT be on OFAC sanctions list
+
+### GET /
+
+Health check endpoint.
+
+**Response**:
+
+```json
+{
+  "status": "ok",
+  "message": "Self Express Backend + Discord verifier bot (offchain)",
+  "verifyEndpoint": "/api/verify",
+  "endpoint": "https://your-domain.com/api/verify"
+}
+```
+
+## Logging
+
+All events are logged to `server/logs/discord-verifier.log` in JSON Lines format.
+
+### Key Events
+
+| Event | Description |
+|-------|-------------|
+| `discord.ready` | Bot connected and ready |
+| `discord.commands_registered` | Slash commands registered |
+| `verification.started` | User initiated /verify |
+| `verification.succeeded` | Proof validated successfully |
+| `verification.failed` | Proof validation failed |
+| `verification.role_assigned` | Role assigned to user |
+| `qr.created` | QR code generated |
+
+### Viewing Logs
+
+```bash
+# Tail logs in real-time
+tail -f server/logs/discord-verifier.log
+
+# Parse JSON logs (requires jq)
+cat server/logs/discord-verifier.log | jq .
+
+# Filter by event type
+cat server/logs/discord-verifier.log | jq 'select(.event == "verification.succeeded")'
+```
+
+## Troubleshooting
+
+### Bot doesn't show /verify command
+
+**Symptoms**: Slash command not appearing in Discord
+
+**Solutions**:
+
+- ✅ Check logs for `discord.commands_registered` event
+- ✅ Verify `DISCORD_CLIENT_ID` and `DISCORD_GUILD_ID` are correct
+- ✅ Ensure bot has `applications.commands` scope
+- ✅ Restart the server after changing `.env`
+- ✅ Wait up to 1 hour (Discord cache) or kick/re-invite bot
+
+### Bot can't send DMs
+
+**Symptoms**: "I'll DM it to you shortly" but no DM received
+
+**Solutions**:
+
+- ✅ Enable DMs: Discord Settings → Privacy & Safety → Allow DMs from server members
+- ✅ Or: Right-click server → Privacy Settings → Allow direct messages
+- ✅ Check logs for `verification.dm_error`
+
+### Role not assigned after verification
+
+**Symptoms**: Verification succeeds but user doesn't get role
+
+**Solutions**:
+
+- ✅ Check `server/logs/discord-verifier.log` for errors:
+  - `verification.role_not_found`: Wrong `DISCORD_VERIFIED_ROLE_ID` or role deleted
+  - `verification.discord_error`: Bot lacks permissions
+- ✅ Ensure bot has `Manage Roles` permission
+- ✅ **CRITICAL**: Bot's role must be **above** the verified role in Server Settings → Roles
+- ✅ Verify `DISCORD_VERIFIED_ROLE_ID` is correct (right-click role → Copy Role ID)
+
+### Self app shows "Invalid endpoint"
+
+**Symptoms**: QR scans but Self app reports endpoint error
+
+**Solutions**:
+
+- ✅ Verify `SELF_ENDPOINT` is **HTTPS** (not HTTP)
+- ✅ Ensure `SELF_ENDPOINT` does NOT contain `localhost` or `127.0.0.1`
+- ✅ Check ngrok is running: `ngrok http 3001`
+- ✅ Confirm ngrok URL matches `SELF_ENDPOINT` in `.env`
+- ✅ Test endpoint: `curl https://your-ngrok-url.ngrok-free.app/`
+- ✅ Restart server after changing `.env`
+
+### Verification fails after restart
+
+**Symptoms**: Pending verifications don't work after server restart
+
+**Cause**: Pending verifications are stored in-memory only
+
+**Solutions**:
+
+- ✅ Users must run `/verify` again after server restarts
+- ✅ Consider implementing persistent storage for production
+
+### Bot shows offline in Discord
+
+**Symptoms**: Bot appears offline, commands don't work
+
+**Solutions**:
+
+- ✅ Check server is running: `npm run dev`
+- ✅ Check logs for `discord.ready` event
+- ✅ Verify `DISCORD_BOT_TOKEN` is correct (may need to reset token)
+- ✅ Check privileged intents are enabled in Developer Portal
+
+### "Interaction failed" error
+
+**Symptoms**: Discord shows "The application did not respond"
+
+**Solutions**:
+
+- ✅ Check server logs for errors
+- ✅ Ensure server is running and responding
+- ✅ Verify ngrok tunnel is active (dev) or server is accessible (prod)
+- ✅ Check network/firewall settings
+
+## Deployment
+
+### Railway (Recommended)
+
+This project includes Railway configuration ([railway.toml](railway.toml)).
+
+1. **Create Railway project**:
+
+   ```bash
+   # Install Railway CLI
+   npm i -g @railway/cli
+
+   # Login and deploy
+   railway login
+   railway init
+   railway up
+   ```
+
+2. **Configure environment variables** in Railway dashboard:
+   - Set all variables from `.env` (except `PORT`)
+   - Update `SELF_ENDPOINT` to your Railway URL + `/api/verify`
+
+3. **Deploy**:
+
+   ```bash
+   git push
+   # Railway auto-deploys on push
+   ```
+
+### Other Platforms
+
+The project works on any Node.js hosting platform:
+
+- **Heroku**: Add `Procfile` with `web: npm start`
+- **Vercel**: Configure `vercel.json` for serverless functions
+- **DigitalOcean App Platform**: Set build command to `npm install`, run command to `npm start`
+- **AWS EC2**: Use PM2 for process management
+
+**Requirements**:
+
+- Node.js 18+ runtime
+- Public HTTPS URL
+- Working directory: `server/`
+- Start command: `npm start`
+
+## Security Considerations
+
+### Strengths
+
+- ✅ **Zero-knowledge proofs**: User's actual age/identity never disclosed
+- ✅ **Cryptographic attestations**: Strong identity guarantees
+- ✅ **OFAC compliance**: Sanctions list checking
+- ✅ **Session-based**: Unique sessionId prevents replay attacks
+- ✅ **HTTPS required**: All communication encrypted
+
+### Known Limitations
+
+- ⚠️ **In-memory state**: Server restart clears pending verifications
+- ⚠️ **No QR cleanup**: QR codes accumulate on disk
+- ⚠️ **No session expiry**: Pending verifications never expire
+- ⚠️ **No rate limiting**: Users can spam `/verify` command
+- ⚠️ **DM dependency**: Users must allow DMs from server
+
+### Recommendations for Production
+
+1. **Add rate limiting**: Prevent `/verify` spam
+2. **Implement session expiry**: Clean up old pending verifications
+3. **Add QR cleanup**: Delete QR files after verification completes
+4. **Use persistent storage**: Redis/database for pending verifications
+5. **Add monitoring**: Sentry, Datadog, or similar
+6. **Implement webhook authentication**: Verify requests to `/api/verify` come from Self
+
+## Project Structure
+
+```text
+self-discord-verification/
+├── server/
+│   ├── src/
+│   │   ├── config.mjs            # Environment configuration
+│   │   ├── logger.mjs            # JSON logging utility
+│   │   ├── selfVerifier.mjs      # Self Protocol verifier
+│   │   └── discordBot.mjs        # Discord bot logic
+│   ├── index.mjs                 # Express server entry point
+│   ├── package.json              # Dependencies
+│   ├── logs/                     # Runtime logs (gitignored)
+│   │   └── discord-verifier.log
+│   └── qrcodes/                  # Generated QR codes (gitignored)
+│       └── self-qr-*.png
+├── .sample.env                   # Environment template
+├── railway.toml                  # Railway deployment config
+├── prettier.config.cjs           # Code formatting
+├── banner.png                    # README banner
+└── README.md                     # This file
+```
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+### Development Guidelines
+
+- Use Prettier for code formatting: `npm run format`
+- Test with ngrok before submitting
+- Update README for new features
+- Add logging for important events
+
+## License
+
+[Add your license here]
+
+## Support
+
+- **Self Protocol**: [https://self.xyz](https://self.xyz)
+- **Self Docs**: [https://docs.self.xyz](https://docs.self.xyz)
+- **Discord.js Guide**: [https://discord.js.org](https://discord.js.org)
+
+## Acknowledgments
+
+- Built with [Self Protocol](https://self.xyz) for zero-knowledge identity verification
+- Uses [Discord.js](https://discord.js.org) for Discord bot functionality
+- Inspired by the need for privacy-preserving age verification
+
+---
+
+**Note**: This project uses Self Protocol's offchain verification mode. No blockchain transactions or gas fees are required.
