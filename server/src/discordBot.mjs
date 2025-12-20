@@ -17,7 +17,6 @@ import {
 import QRCode from "qrcode";
 
 import {
-  SELF_SCOPE,
   SELF_ENDPOINT,
   DISCORD_BOT_TOKEN,
   DISCORD_CLIENT_ID,
@@ -42,8 +41,8 @@ const pendingVerifications = new Map();
 let discordClient = null;
 
 async function createSelfVerificationQr(sessionId, discordUser) {
-  if (!SELF_SCOPE || !SELF_ENDPOINT) {
-    throw new Error("SELF_SCOPE and SELF_ENDPOINT must be configured");
+  if (!SELF_ENDPOINT) {
+    throw new Error("SELF_ENDPOINT must be configured");
   }
 
   const hexUserId = BigInt(discordUser.id).toString(16).padStart(40, "0");
@@ -52,7 +51,6 @@ async function createSelfVerificationQr(sessionId, discordUser) {
   const selfApp = new SelfAppBuilder({
     version: 2,
     appName: SELF_APP_NAME,
-    scope: SELF_SCOPE,
     endpoint: SELF_ENDPOINT,
     logoBase64: SELF_LOGO_URL,
     userId,
