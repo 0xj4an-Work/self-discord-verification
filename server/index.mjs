@@ -1,7 +1,7 @@
 import express from "express";
 import bodyParser from "body-parser";
 
-import { PORT, SELF_SCOPE, SELF_ENDPOINT } from "./src/config.mjs";
+import { PORT, SELF_ENDPOINT } from "./src/config.mjs";
 import { logEvent } from "./src/logger.mjs";
 import {
   selfBackendVerifier,
@@ -18,9 +18,8 @@ app.use(bodyParser.json());
 app.get("/", (_req, res) => {
   res.json({
     status: "ok",
-    message: "Self Express Backend + Discord verifier bot",
+    message: "Self Express Backend + Discord verifier bot (offchain)",
     verifyEndpoint: "/api/verify",
-    scope: SELF_SCOPE,
     endpoint: SELF_ENDPOINT,
   });
 });

@@ -1,12 +1,12 @@
 import { SelfBackendVerifier, AllIds, DefaultConfigStore } from "@selfxyz/core";
 
-import { SELF_SCOPE, SELF_ENDPOINT } from "./config.mjs";
+import { SELF_ENDPOINT } from "./config.mjs";
 import { logEvent } from "./logger.mjs";
 
 export const selfBackendVerifier = new SelfBackendVerifier(
-  SELF_SCOPE,
+  undefined, // No scope for offchain verification
   SELF_ENDPOINT,
-  true,
+  false, // offchain mode
   AllIds,
   new DefaultConfigStore({
     minimumAge: 18,

@@ -5,8 +5,6 @@ dotenv.config();
 export const PORT = process.env.PORT || 8080;
 console.log("PORT", PORT);
 
-export const SELF_SCOPE = process.env.SELF_SCOPE;
-console.log("SELF_SCOPE", SELF_SCOPE);
 export const SELF_ENDPOINT = process.env.SELF_ENDPOINT;
 console.log("SELF_ENDPOINT", SELF_ENDPOINT);
 
