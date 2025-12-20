@@ -56,6 +56,7 @@ async function createSelfVerificationQr(sessionId, discordUser) {
     userId,
     endpointType: "https",
     userIdType: "hex",
+    // No scope field for offchain verification
     userDefinedData: JSON.stringify({
       kind: "discord-self-verification",
       sessionId,
