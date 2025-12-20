@@ -4,7 +4,7 @@ import { SELF_ENDPOINT } from "./config.mjs";
 import { logEvent } from "./logger.mjs";
 
 export const selfBackendVerifier = new SelfBackendVerifier(
-  "", // Empty scope for offchain verification
+  "offchain", // Generic scope for offchain verification (must match QR scope)
   SELF_ENDPOINT,
   false, // offchain mode (mockPassport=false means production)
   AllIds,
