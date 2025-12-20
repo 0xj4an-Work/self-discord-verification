@@ -149,7 +149,7 @@ export async function handleDiscordVerificationSuccess(sessionId) {
     try {
       const dm = await member.createDM();
       await dm.send(
-        "✅ Your Self verification succeeded. You now have access to the restricted channels.",
+        "✅ Your Self verification succeeded. You've been granted the Self.xyz Verified role, which unlocks the exclusive channels.",
       );
     } catch (dmError) {
       logEvent(
@@ -258,7 +258,7 @@ async function handleVerifyCommand(interaction) {
 
     await dm.send({
       content:
-        "Scan this QR code with the Self app (staging/mock passports) to verify your age/identity.",
+        "Scan this QR code with the Self.xyz app to verify and receive the Self.xyz Verified role.",
       files: [attachment],
     });
   } catch (dmError) {
