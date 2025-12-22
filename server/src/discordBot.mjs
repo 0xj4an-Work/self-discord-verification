@@ -13,9 +13,6 @@ import {
   SlashCommandBuilder,
   AttachmentBuilder,
   MessageFlags,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
 } from "discord.js";
 import QRCode from "qrcode";
 
@@ -289,14 +286,6 @@ async function handleVerifyCommand(interaction) {
   try {
     const dm = await user.createDM();
 
-    // Create a button with the deep link for mobile users
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setLabel("Open in Self App")
-        .setURL(verificationData.universalLink)
-        .setStyle(ButtonStyle.Link)
-    );
-
     // Send different messages based on whether we have a QR code
     if (verificationData.filePath) {
       const attachment = new AttachmentBuilder(verificationData.filePath, {
@@ -307,14 +296,13 @@ async function handleVerifyCommand(interaction) {
         content:
           "📱 **Verification Required**\n\n" +
           "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
-          "**On Mobile?**\n" +
-          "Tap the button below to open the Self app directly.\n\n" +
+          "**On Mobile Discord?**\n" +
+          "Tap this link to open the Self app: [Open Self App](<" + verificationData.universalLink + ">)\n\n" +
           "**On Desktop?**\n" +
           "Scan the QR code below with the Self.xyz app on your phone.\n\n" +
           "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
           "━━━━━━━━━━━━━━━━━━━━━━",
         files: [attachment],
-        components: [row],
       });
     } else {
       // Mobile-only flow (no QR code)
@@ -323,11 +311,10 @@ async function handleVerifyCommand(interaction) {
           "📱 **Verification Required**\n\n" +
           "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
           "**Steps:**\n" +
-          "1️⃣ Tap the button below to open the Self app\n" +
+          "1️⃣ Tap this link to open the Self app: [Open Self App](<" + verificationData.universalLink + ">)\n" +
           "2️⃣ Complete the verification process\n\n" +
           "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
           "━━━━━━━━━━━━━━━━━━━━━━",
-        components: [row],
       });
     }
   } catch (dmError) {
