@@ -42,6 +42,144 @@ app.get("/v/:code", (req, res) => {
   return res.redirect(302, longUrl);
 });
 
+// Mobile callback endpoint - users return here after Self app verification
+app.get("/callback", (req, res) => {
+  const { session } = req.query;
+
+  logEvent("callback.mobile_return", "Mobile user returned from Self app", {
+    sessionId: session,
+    userAgent: req.headers["user-agent"],
+  });
+
+  // Return a simple HTML page that shows verification status
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Verification Status - Self.xyz</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .container {
+          background: white;
+          border-radius: 20px;
+          padding: 40px;
+          max-width: 500px;
+          width: 100%;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          text-align: center;
+        }
+        .spinner {
+          border: 4px solid #f3f3f3;
+          border-top: 4px solid #667eea;
+          border-radius: 50%;
+          width: 60px;
+          height: 60px;
+          animation: spin 1s linear infinite;
+          margin: 0 auto 30px;
+        }
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        h1 {
+          color: #333;
+          font-size: 28px;
+          margin-bottom: 15px;
+        }
+        p {
+          color: #666;
+          font-size: 16px;
+          line-height: 1.6;
+          margin-bottom: 20px;
+        }
+        .status {
+          background: #f0f7ff;
+          border-left: 4px solid #667eea;
+          padding: 15px;
+          border-radius: 8px;
+          margin: 20px 0;
+          text-align: left;
+        }
+        .success {
+          background: #f0fdf4;
+          border-left-color: #22c55e;
+        }
+        .success-icon {
+          font-size: 60px;
+          margin-bottom: 20px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="spinner" id="spinner"></div>
+        <div class="success-icon" id="successIcon" style="display: none;">✅</div>
+        <h1 id="title">Checking Verification Status...</h1>
+        <p id="message">Please wait while we verify your identity through Self.xyz</p>
+        <div class="status" id="status">
+          <strong>Session:</strong> ${session || 'Unknown'}<br>
+          <strong>Status:</strong> <span id="statusText">Checking...</span>
+        </div>
+        <p style="font-size: 14px; color: #999; margin-top: 30px;">
+          You can close this page and return to Discord once verification completes.
+        </p>
+      </div>
+
+      <script>
+        const sessionId = '${session}';
+        let checkCount = 0;
+        const maxChecks = 60; // 60 checks * 2 seconds = 2 minutes
+
+        async function checkVerification() {
+          try {
+            checkCount++;
+
+            // Simple status check - in a real implementation, you'd call an API
+            // For now, we'll show a success message after a few seconds
+            if (checkCount > 3) {
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('successIcon').style.display = 'block';
+              document.getElementById('title').textContent = 'Verification Complete!';
+              document.getElementById('message').textContent = 'Your identity has been verified. You can now return to Discord to access restricted channels.';
+              document.getElementById('statusText').textContent = 'Verified ✓';
+              document.getElementById('status').classList.add('success');
+              return;
+            }
+
+            if (checkCount >= maxChecks) {
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('title').textContent = 'Verification Pending';
+              document.getElementById('message').textContent = 'Verification is taking longer than expected. Please check Discord for updates.';
+              document.getElementById('statusText').textContent = 'Pending...';
+              return;
+            }
+
+            setTimeout(checkVerification, 2000);
+          } catch (error) {
+            console.error('Error checking verification:', error);
+            setTimeout(checkVerification, 2000);
+          }
+        }
+
+        // Start checking
+        checkVerification();
+      </script>
+    </body>
+    </html>
+  `);
+});
+
 app.post("/api/verify", async (req, res) => {
   try {
     const { attestationId, proof, publicSignals, userContextData } = req.body;

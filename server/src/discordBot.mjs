@@ -44,13 +44,23 @@ fs.mkdirSync(qrOutputDir, { recursive: true });
 const pendingVerifications = new Map();
 let discordClient = null;
 
-async function createSelfVerificationLink(sessionId, discordUser, generateQr = true) {
+async function createSelfVerificationLink(sessionId, discordUser, generateQr = true, isMobile = false) {
   if (!SELF_ENDPOINT) {
     throw new Error("SELF_ENDPOINT must be configured");
   }
 
   const hexUserId = BigInt(discordUser.id).toString(16).padStart(40, "0");
   const userId = `0x${hexUserId.slice(0, 40)}`;
+
+  // Build callback URL for mobile users
+  const baseUrl = SELF_ENDPOINT.replace("/api/verify", "");
+  const callbackUrl = isMobile ? `${baseUrl}/callback?session=${sessionId}` : "";
+
+  logEvent("verification.callback_url", "Building Self verification with callback", {
+    sessionId,
+    isMobile,
+    callbackUrl: callbackUrl || "none (desktop)",
+  });
 
   const selfApp = new SelfAppBuilder({
     version: 2,
@@ -67,6 +77,7 @@ async function createSelfVerificationLink(sessionId, discordUser, generateQr = t
       discordUserId: discordUser.id,
       guildId: DISCORD_GUILD_ID,
     }),
+    deeplinkCallback: callbackUrl, // Mobile users get redirected back after verification
     disclosures: {
       minimumAge: 18,
     },
@@ -278,8 +289,8 @@ async function handlePlatformSelection(interaction) {
 
   let verificationData;
   try {
-    // Generate QR only for desktop users
-    verificationData = await createSelfVerificationLink(sessionId, user, !isMobile);
+    // Generate QR only for desktop users, pass isMobile flag for callback URL
+    verificationData = await createSelfVerificationLink(sessionId, user, !isMobile, isMobile);
   } catch (error) {
     logEvent("verification.link_error", "Failed to create Self verification link", {
       error: error instanceof Error ? error.message : String(error),
