@@ -2,18 +2,20 @@
 
 ## Overview
 
-The Discord bot now supports both mobile and desktop users with an optimized verification flow for each platform.
+The Discord bot now supports both mobile and desktop users with platform-specific verification flows.
 
 ## How It Works
 
-### Universal Approach (Current Implementation)
+### Platform Selection Approach (Current Implementation)
 
-Instead of trying to detect the user's device (which Discord doesn't reliably expose), the bot now sends **both** options in every DM:
+Since Discord doesn't reliably expose device information, the bot uses a **two-step interaction** where users select their platform:
 
-1. **For Mobile Users**: A clickable "Open in Self App" button that deep-links directly into the Self.xyz mobile app
-2. **For Desktop Users**: A QR code image that can be scanned with their phone
+1. **Step 1**: User runs `/verify` and sees two buttons: "📱 I'm on Mobile" and "🖥️ I'm on Desktop"
+2. **Step 2**: Based on selection:
+   - **Mobile users**: Receive a clickable deep link that opens the Self.xyz app directly
+   - **Desktop users**: Receive a QR code to scan with their phone
 
-This gives users the flexibility to choose their preferred verification method regardless of where they run the `/verify` command.
+This provides platform-specific experiences while letting users choose their device type.
 
 ## Changes Made
 
@@ -24,7 +26,7 @@ Added Discord.js components for interactive buttons:
 - `ButtonBuilder` - Creates clickable buttons
 - `ButtonStyle` - Defines button appearance
 
-### 2. Refactored QR Generation Function ([discordBot.mjs](server/src/discordBot.mjs):46-102)
+### 2. Refactored QR Generation Function ([discordBot.mjs](server/src/discordBot.mjs):43-99)
 
 **Before**: `createSelfVerificationQr(sessionId, discordUser)`
 **After**: `createSelfVerificationLink(sessionId, discordUser, generateQr = true)`
@@ -35,42 +37,57 @@ Added Discord.js components for interactive buttons:
 - Returns both the link and QR file paths
 - Logs different events for mobile vs desktop flows
 
-### 3. Enhanced Verification Command ([discordBot.mjs](server/src/discordBot.mjs):209-380)
+### 3. Platform Selection Flow ([discordBot.mjs](server/src/discordBot.mjs):198-391)
 
-**New user experience**:
+**New two-step user experience**:
 
-#### DM Content (with both options):
+#### Step 1: Platform Selection
+When user runs `/verify`, they see:
+```
+Self.xyz Verification
+
+To verify your age and access restricted channels, please select your device type:
+
+[📱 I'm on Mobile] [🖥️ I'm on Desktop]
+```
+
+#### Step 2a: Mobile Flow
+If user clicks "📱 I'm on Mobile", they receive a DM with:
 ```
 📱 Verification Required
 
 To access exclusive restricted channels in the Self Discord server,
 please complete verification using the Self.xyz mobile app.
 
-On Mobile?
-Tap the button below to open the Self app directly.
-
-On Desktop?
-Scan the QR code below with the Self.xyz app on your phone.
+Tap the link below to open the Self app:
+https://redirect.self.xyz?selfApp=...
 
 Once verified, you'll automatically receive the Self.xyz Verified
 role and gain access to exclusive channels!
-
-━━━━━━━━━━━━━━━━━━━━━━
-[QR Code Image]
-[Open in Self App Button]
 ```
 
-#### What happens:
-1. User runs `/verify` from mobile or desktop Discord
-2. Bot generates both:
-   - Universal deep link (works on mobile)
-   - QR code image (works for desktop scanning)
-3. DM includes:
-   - Clear instructions for both platforms
-   - Clickable button (mobile users can tap)
-   - QR code image (desktop users can scan)
-4. User chooses their preferred method
-5. Verification completes as before
+#### Step 2b: Desktop Flow
+If user clicks "🖥️ I'm on Desktop", they receive a DM with:
+```
+🖥️ Verification Required
+
+To access exclusive restricted channels in the Self Discord server,
+please complete verification using the Self.xyz mobile app.
+
+Scan the QR code below with the Self.xyz app on your phone:
+
+1️⃣ Open the Self.xyz app on your phone
+2️⃣ Scan the QR code below
+3️⃣ Complete the verification process
+
+[QR Code Image]
+```
+
+### 4. Enhanced Interaction Handler ([discordBot.mjs](server/src/discordBot.mjs):457-479)
+
+Now handles both:
+- Slash commands (`/verify`)
+- Button interactions (platform selection)
 
 ## Technical Details
 
