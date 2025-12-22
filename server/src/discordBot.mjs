@@ -13,6 +13,9 @@ import {
   SlashCommandBuilder,
   AttachmentBuilder,
   MessageFlags,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from "discord.js";
 import QRCode from "qrcode";
 
@@ -40,7 +43,7 @@ fs.mkdirSync(qrOutputDir, { recursive: true });
 const pendingVerifications = new Map();
 let discordClient = null;
 
-async function createSelfVerificationQr(sessionId, discordUser) {
+async function createSelfVerificationLink(sessionId, discordUser, generateQr = true) {
   if (!SELF_ENDPOINT) {
     throw new Error("SELF_ENDPOINT must be configured");
   }
@@ -69,19 +72,31 @@ async function createSelfVerificationQr(sessionId, discordUser) {
   }).build();
 
   const universalLink = getUniversalLink(selfApp);
-  const filename = `self-qr-${sessionId}.png`;
-  const filePath = path.join(qrOutputDir, filename);
 
-  await QRCode.toFile(filePath, universalLink, {
-    width: 512,
-    errorCorrectionLevel: "H",
-  });
+  let filename = null;
+  let filePath = null;
 
-  logEvent("qr.created", "Created Self QR code", {
-    sessionId,
-    userId: discordUser.id,
-    filePath,
-  });
+  // Only generate QR code if requested (for desktop users)
+  if (generateQr) {
+    filename = `self-qr-${sessionId}.png`;
+    filePath = path.join(qrOutputDir, filename);
+
+    await QRCode.toFile(filePath, universalLink, {
+      width: 512,
+      errorCorrectionLevel: "H",
+    });
+
+    logEvent("qr.created", "Created Self QR code", {
+      sessionId,
+      userId: discordUser.id,
+      filePath,
+    });
+  } else {
+    logEvent("link.created", "Created Self deep link for mobile", {
+      sessionId,
+      userId: discordUser.id,
+    });
+  }
 
   return { universalLink, filename, filePath };
 }
@@ -180,6 +195,17 @@ export async function handleDiscordVerificationSuccess(sessionId) {
   }
 }
 
+/**
+ * Detects if the user is on a mobile device based on the interaction
+ * Discord doesn't provide direct device info, but we can use contextual clues
+ */
+function isMobileUser(interaction) {
+  // Check if interaction came from a mobile client
+  // Discord.js doesn't expose this directly, but we can check the interaction properties
+  // As a fallback, we'll provide both options to users
+  return false; // Will be determined by user choice instead
+}
+
 async function handleVerifyCommand(interaction) {
   const { user, guild } = interaction;
 
@@ -206,10 +232,13 @@ async function handleVerifyCommand(interaction) {
 
   const sessionId = crypto.randomUUID();
 
+  // Detect if user is on mobile (currently we'll send both options)
+  const isMobile = isMobileUser(interaction);
+
   try {
     await interaction.reply({
       content:
-        "Generating your Self verification QR… I’ll DM it to you shortly.",
+        "Generating your Self verification link… I'll DM it to you shortly.",
       flags: MessageFlags.Ephemeral,
     });
   } catch (replyError) {
@@ -224,22 +253,23 @@ async function handleVerifyCommand(interaction) {
     return;
   }
 
-  let qr;
+  let verificationData;
   try {
-    qr = await createSelfVerificationQr(sessionId, user);
+    // For now, always generate QR but also include the deep link
+    verificationData = await createSelfVerificationLink(sessionId, user, true);
   } catch (error) {
-    logEvent("verification.qr_error", "Failed to create Self QR", {
+    logEvent("verification.link_error", "Failed to create Self verification link", {
       error: error instanceof Error ? error.message : String(error),
     });
     try {
       await interaction.editReply({
         content:
-          "I couldn't create a verification QR right now. Please try again later.",
+          "I couldn't create a verification link right now. Please try again later.",
       });
     } catch (editError) {
       logEvent(
         "discord.interaction_edit_error",
-        "Failed to edit interaction reply after QR error",
+        "Failed to edit interaction reply after link error",
         {
           error:
             editError instanceof Error ? editError.message : String(editError),
@@ -253,29 +283,55 @@ async function handleVerifyCommand(interaction) {
     discordUserId: user.id,
     guildId: guild.id,
     createdAt: Date.now(),
-    qrPath: qr.filePath,
+    qrPath: verificationData.filePath,
   });
 
   try {
     const dm = await user.createDM();
-    const attachment = new AttachmentBuilder(qr.filePath, {
-      name: qr.filename,
-    });
 
-    await dm.send({
-      content:
-        "📱 **Verification Required**\n\n" +
-        "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
-        "**Steps:**\n" +
-        "1️⃣ Open the Self.xyz app on your phone\n" +
-        "2️⃣ Scan the QR code below\n" +
-        "3️⃣ Complete the verification process\n\n" +
-        "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
-        "━━━━━━━━━━━━━━━━━━━━━━",
-      files: [attachment],
-    });
+    // Create a button with the deep link for mobile users
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("Open in Self App")
+        .setURL(verificationData.universalLink)
+        .setStyle(ButtonStyle.Link)
+    );
+
+    // Send different messages based on whether we have a QR code
+    if (verificationData.filePath) {
+      const attachment = new AttachmentBuilder(verificationData.filePath, {
+        name: verificationData.filename,
+      });
+
+      await dm.send({
+        content:
+          "📱 **Verification Required**\n\n" +
+          "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
+          "**On Mobile?**\n" +
+          "Tap the button below to open the Self app directly.\n\n" +
+          "**On Desktop?**\n" +
+          "Scan the QR code below with the Self.xyz app on your phone.\n\n" +
+          "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━",
+        files: [attachment],
+        components: [row],
+      });
+    } else {
+      // Mobile-only flow (no QR code)
+      await dm.send({
+        content:
+          "📱 **Verification Required**\n\n" +
+          "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
+          "**Steps:**\n" +
+          "1️⃣ Tap the button below to open the Self app\n" +
+          "2️⃣ Complete the verification process\n\n" +
+          "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━",
+        components: [row],
+      });
+    }
   } catch (dmError) {
-    logEvent("verification.dm_error", "Failed to DM user with QR", {
+    logEvent("verification.dm_error", "Failed to DM user with verification link", {
       discordUserId: user.id,
       error: dmError instanceof Error ? dmError.message : String(dmError),
     });
@@ -302,12 +358,12 @@ async function handleVerifyCommand(interaction) {
   try {
     await interaction.editReply({
       content:
-        "I've sent you a DM with a Self verification QR code. Complete verification in the Self app and I’ll automatically grant you access.",
+        "I've sent you a DM with a Self verification link. Complete verification in the Self app and I'll automatically grant you access.",
     });
   } catch (editError) {
     logEvent(
       "discord.interaction_edit_error",
-      "Failed to edit interaction reply after sending QR DM",
+      "Failed to edit interaction reply after sending verification DM",
       {
         error:
           editError instanceof Error ? editError.message : String(editError),
@@ -319,6 +375,7 @@ async function handleVerifyCommand(interaction) {
     sessionId,
     discordUserId: user.id,
     guildId: guild.id,
+    platform: isMobile ? "mobile" : "desktop",
   });
 }
 
