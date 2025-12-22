@@ -13,6 +13,9 @@ import {
   SlashCommandBuilder,
   AttachmentBuilder,
   MessageFlags,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
 } from "discord.js";
 import QRCode from "qrcode";
 
@@ -192,17 +195,6 @@ export async function handleDiscordVerificationSuccess(sessionId) {
   }
 }
 
-/**
- * Detects if the user is on a mobile device based on the interaction
- * Discord doesn't provide direct device info, but we can use contextual clues
- */
-function isMobileUser(interaction) {
-  // Check if interaction came from a mobile client
-  // Discord.js doesn't expose this directly, but we can check the interaction properties
-  // As a fallback, we'll provide both options to users
-  return false; // Will be determined by user choice instead
-}
-
 async function handleVerifyCommand(interaction) {
   const { user, guild } = interaction;
 
@@ -227,24 +219,57 @@ async function handleVerifyCommand(interaction) {
     return;
   }
 
-  const sessionId = crypto.randomUUID();
-
-  // Detect if user is on mobile (currently we'll send both options)
-  const isMobile = isMobileUser(interaction);
+  // Create platform selection buttons
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("verify_mobile")
+      .setLabel("📱 I'm on Mobile")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId("verify_desktop")
+      .setLabel("🖥️ I'm on Desktop")
+      .setStyle(ButtonStyle.Secondary)
+  );
 
   try {
     await interaction.reply({
       content:
-        "Generating your Self verification link… I'll DM it to you shortly.",
+        "**Self.xyz Verification**\n\n" +
+        "To verify your age and access restricted channels, please select your device type:",
+      components: [row],
       flags: MessageFlags.Ephemeral,
     });
   } catch (replyError) {
     logEvent(
       "discord.interaction_reply_error",
-      "Failed to send initial interaction reply",
+      "Failed to send platform selection",
       {
         error:
           replyError instanceof Error ? replyError.message : String(replyError),
+      },
+    );
+  }
+}
+
+async function handlePlatformSelection(interaction) {
+  const { user, guild, customId } = interaction;
+  const isMobile = customId === "verify_mobile";
+
+  const sessionId = crypto.randomUUID();
+
+  try {
+    await interaction.update({
+      content:
+        "Generating your Self verification link… I'll DM it to you shortly.",
+      components: [],
+    });
+  } catch (updateError) {
+    logEvent(
+      "discord.interaction_update_error",
+      "Failed to update interaction after platform selection",
+      {
+        error:
+          updateError instanceof Error ? updateError.message : String(updateError),
       },
     );
     return;
@@ -252,8 +277,8 @@ async function handleVerifyCommand(interaction) {
 
   let verificationData;
   try {
-    // For now, always generate QR but also include the deep link
-    verificationData = await createSelfVerificationLink(sessionId, user, true);
+    // Generate QR only for desktop users
+    verificationData = await createSelfVerificationLink(sessionId, user, !isMobile);
   } catch (error) {
     logEvent("verification.link_error", "Failed to create Self verification link", {
       error: error instanceof Error ? error.message : String(error),
@@ -286,35 +311,34 @@ async function handleVerifyCommand(interaction) {
   try {
     const dm = await user.createDM();
 
-    // Send different messages based on whether we have a QR code
-    if (verificationData.filePath) {
+    if (isMobile) {
+      // Mobile-only flow: Just send the clickable link
+      await dm.send({
+        content:
+          "📱 **Verification Required**\n\n" +
+          "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
+          "**Tap the link below to open the Self app:**\n" +
+          verificationData.universalLink + "\n\n" +
+          "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
+          "━━━━━━━━━━━━━━━━━━━━━━",
+      });
+    } else {
+      // Desktop flow: Send QR code
       const attachment = new AttachmentBuilder(verificationData.filePath, {
         name: verificationData.filename,
       });
 
       await dm.send({
         content:
-          "📱 **Verification Required**\n\n" +
+          "🖥️ **Verification Required**\n\n" +
           "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
-          "**On Mobile Discord?**\n" +
-          "Tap this link to open the Self app: [Open Self App](<" + verificationData.universalLink + ">)\n\n" +
-          "**On Desktop?**\n" +
-          "Scan the QR code below with the Self.xyz app on your phone.\n\n" +
+          "**Scan the QR code below with the Self.xyz app on your phone:**\n\n" +
+          "1️⃣ Open the Self.xyz app on your phone\n" +
+          "2️⃣ Scan the QR code below\n" +
+          "3️⃣ Complete the verification process\n\n" +
           "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
           "━━━━━━━━━━━━━━━━━━━━━━",
         files: [attachment],
-      });
-    } else {
-      // Mobile-only flow (no QR code)
-      await dm.send({
-        content:
-          "📱 **Verification Required**\n\n" +
-          "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
-          "**Steps:**\n" +
-          "1️⃣ Tap this link to open the Self app: [Open Self App](<" + verificationData.universalLink + ">)\n" +
-          "2️⃣ Complete the verification process\n\n" +
-          "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
-          "━━━━━━━━━━━━━━━━━━━━━━",
       });
     }
   } catch (dmError) {
@@ -345,7 +369,7 @@ async function handleVerifyCommand(interaction) {
   try {
     await interaction.editReply({
       content:
-        "I've sent you a DM with a Self verification link. Complete verification in the Self app and I'll automatically grant you access.",
+        "I've sent you a DM with your verification " + (isMobile ? "link" : "QR code") + ". Complete verification in the Self app and I'll automatically grant you access.",
     });
   } catch (editError) {
     logEvent(
@@ -431,15 +455,24 @@ export async function startDiscordBot() {
   });
 
   client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-
     try {
-      if (interaction.commandName === "verify") {
-        await handleVerifyCommand(interaction);
+      // Handle slash commands
+      if (interaction.isChatInputCommand()) {
+        if (interaction.commandName === "verify") {
+          await handleVerifyCommand(interaction);
+        }
+      }
+
+      // Handle button clicks
+      if (interaction.isButton()) {
+        if (interaction.customId === "verify_mobile" || interaction.customId === "verify_desktop") {
+          await handlePlatformSelection(interaction);
+        }
       }
     } catch (error) {
       logEvent("discord.interaction_error", "Error handling interaction", {
-        commandName: interaction.commandName,
+        type: interaction.type,
+        customId: interaction.isButton() ? interaction.customId : interaction.commandName,
         error: error instanceof Error ? error.message : String(error),
       });
     }
