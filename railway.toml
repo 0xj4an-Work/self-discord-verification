@@ -4,3 +4,6 @@ builder = "nixpacks"
 [deploy]
 startCommand = "npm start"
 workingDirectory = "server"
+
+[build.nixpacksPlan]
+cmds = ["npm install --omit=dev"]

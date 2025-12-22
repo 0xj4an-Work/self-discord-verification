@@ -450,7 +450,7 @@ export async function startDiscordBot() {
     partials: [Partials.Channel],
   });
 
-  client.once("ready", () => {
+  client.once("clientReady", () => {
     logEvent("discord.ready", "Discord bot logged in", {
       username: client.user?.username,
       id: client.user?.id,
