@@ -312,15 +312,18 @@ async function handlePlatformSelection(interaction) {
     const dm = await user.createDM();
 
     if (isMobile) {
-      // Mobile-only flow: Just send the clickable link
+      // Mobile-only flow: Send instructions and link separately for better clickability
       await dm.send({
         content:
           "📱 **Verification Required**\n\n" +
           "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
-          "**Tap the link below to open the Self app:**\n" +
-          "<" + verificationData.universalLink + ">\n\n" +
-          "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
-          "━━━━━━━━━━━━━━━━━━━━━━",
+          "**Tap the link in the next message to open the Self app.**\n\n" +
+          "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!",
+      });
+
+      // Send the link as a separate message to ensure it's clickable
+      await dm.send({
+        content: verificationData.universalLink,
       });
     } else {
       // Desktop flow: Send QR code
