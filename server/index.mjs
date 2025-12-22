@@ -11,6 +11,7 @@ import {
   startDiscordBot,
   handleDiscordVerificationSuccess,
 } from "./src/discordBot.mjs";
+import { resolveShortUrl } from "./src/urlShortener.mjs";
 
 const app = express();
 app.use(bodyParser.json());
@@ -22,6 +23,23 @@ app.get("/", (_req, res) => {
     verifyEndpoint: "/api/verify",
     endpoint: SELF_ENDPOINT,
   });
+});
+
+// URL shortener redirect endpoint
+app.get("/v/:code", (req, res) => {
+  const { code } = req.params;
+  const longUrl = resolveShortUrl(code);
+
+  if (!longUrl) {
+    return res.status(404).send("Link not found or expired");
+  }
+
+  logEvent("shorturl.redirect", "Redirecting short URL", {
+    code,
+    longUrl: longUrl.substring(0, 100) + "...",
+  });
+
+  return res.redirect(302, longUrl);
 });
 
 app.post("/api/verify", async (req, res) => {
