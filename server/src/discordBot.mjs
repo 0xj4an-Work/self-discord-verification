@@ -318,7 +318,7 @@ async function handlePlatformSelection(interaction) {
           "📱 **Verification Required**\n\n" +
           "To access exclusive restricted channels in the Self Discord server, please complete verification using the Self.xyz mobile app.\n\n" +
           "**Tap the link below to open the Self app:**\n" +
-          verificationData.universalLink + "\n\n" +
+          "<" + verificationData.universalLink + ">\n\n" +
           "Once verified, you'll automatically receive the **Self.xyz Verified** role and gain access to exclusive channels!\n\n" +
           "━━━━━━━━━━━━━━━━━━━━━━",
       });
